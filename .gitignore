@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.claude/settings.local.json
+
+# outputs of main.py and the tutorial notebook
+ExampleSession/
+ExampleRoot/
+ExamplePlots/
