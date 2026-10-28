@@ -11,10 +11,11 @@ Our data is produced by the converter with documentation existing as docstring i
 All repos sit side by side in one parent folder (paths in this file and in the code are relative to it):
 
 ```
-FANCiRepos/
-├── Average_RF_mapping/        this project: git clone https://github.com/FANCilab/RF_mappers.git Average_RF_mapping
-├── ONE/                       needed to run: git clone https://github.com/int-brain-lab/ONE  (tested at 636d76f, ONE-api 3.6.1)
-└── OneConverter/              needed to run: git clone https://github.com/FANCilab/OneConverter.git  (tested at 21907e6)
+<parent folder>/
+├── <this repo>/               this project, cloned from https://github.com/FANCilab/RF_mappers (any folder name)
+├── ONE/                       https://github.com/int-brain-lab/ONE  (tested at 636d76f, ONE-api 3.6.1)
+├── OneConverter/              https://github.com/FANCilab/OneConverter  (tested at 21907e6)
+└── rfmap-venv/                Python environment created by the setup below
 ```
 
 ONE and OneConverter are installed as editable packages (`pip install -e`), so edits or `git pull` in those checkouts take effect without reinstalling. OneConverter imports `one`, so install ONE first.
@@ -37,43 +38,30 @@ Python >= 3.10 (ONE's minimum); tested with Python 3.14.5. Direct imports of thi
 | pycolormap-2d | 1.1.7 | plotting modules (import name `pycolormap_2d`) |
 | ipykernel | 7.4.0 | running the notebook |
 
-### Install with conda (preferred when conda is available)
+### Install
 
-From an Anaconda Prompt (or any shell where `conda` works), in the parent folder `FANCiRepos/`:
+Needs git and Python >= 3.10 on the PATH. In PowerShell, from inside this repo (already cloned); the other repos and the venv go next to it:
 
 ```
-conda create -n rfmap -c conda-forge python=3.14 -y
-conda activate rfmap
-python -m pip install -e ./ONE
-python -m pip install -e ./OneConverter
+git clone https://github.com/int-brain-lab/ONE ../ONE
+git clone https://github.com/FANCilab/OneConverter.git ../OneConverter
+python -m venv ../rfmap-venv
+../rfmap-venv/Scripts/Activate.ps1        # Linux/macOS: source ../rfmap-venv/bin/activate
+python -m pip install -e ../ONE
+python -m pip install -e ../OneConverter
 python -m pip install numpy scipy statsmodels pylops pyproximal sparse matplotlib pycolormap-2d ipykernel
 python -m ipykernel install --user --name rfmap --display-name "Python (rfmap)"
+python -c "import one.api, OneConverter, mapAverageRF, single_session_plots, grouped_session_plots; print('imports ok')"
 ```
 
-Packages go through pip inside the conda env (pycolormap-2d, pylops and pyproximal are pip packages). In VS Code / Jupyter pick the `rfmap` interpreter or kernel.
-
-### Install without conda
-
-Same steps with a venv, from `FANCiRepos/`:
-
-```
-python -m venv rfmap-venv
-rfmap-venv\Scripts\Activate.ps1        # Windows PowerShell; Linux/macOS: source rfmap-venv/bin/activate
-python -m pip install -e ./ONE
-python -m pip install -e ./OneConverter
-python -m pip install numpy scipy statsmodels pylops pyproximal sparse matplotlib pycolormap-2d ipykernel
-python -m ipykernel install --user --name rfmap --display-name "Python (rfmap)"
-```
-
-If Windows blocks `Activate.ps1`, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use `rfmap-venv\Scripts\activate.bat` from cmd.
+If Windows blocks `Activate.ps1`, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use `..\rfmap-venv\Scripts\activate.bat` from cmd. In VS Code / Jupyter pick the `rfmap-venv` interpreter or the `Python (rfmap)` kernel. In a new terminal, activate the venv again before running anything.
 
 ### Check and run
 
-From inside `Average_RF_mapping/` (the project's modules `utils`, `mapAverageRF`, `single_session_plots` and `grouped_session_plots` are imported from the current folder, not installed):
+From inside this repo (the project's modules `utils`, `mapAverageRF`, `single_session_plots` and `grouped_session_plots` are imported from the current folder, not installed):
 
 ```
-python -c "import one.api, OneConverter, mapAverageRF, single_session_plots, grouped_session_plots; print('imports ok')"
-python main.py                 # convert NM023/20260428/1 into ./ExampleSession and map its RFs
+python main.py                 # convert NM023/20260428/1 into ./ExampleRoot, map its RFs, plot into ./ExamplePlots
 ```
 
 or open `RF_mapping_tutorial.ipynb` with the rfmap kernel (writes to ./ExampleRoot and ./ExamplePlots).

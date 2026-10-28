@@ -7,8 +7,8 @@ Python version of the lab's average RF mapping (sparse-noise stimulus, ridge reg
 Put the repositories side by side in one folder:
 
 ```
-FANCiRepos/
-├── Average_RF_mapping/        https://github.com/FANCilab/RF_mappers: this project (clone it into a folder named Average_RF_mapping)
+<parent folder>/
+├── <this repo>/               https://github.com/FANCilab/RF_mappers: this project
 ├── ONE/                       https://github.com/int-brain-lab/ONE: IBL's loader, finds and loads the converted files
 └── OneConverter/              https://github.com/FANCilab/OneConverter: converts raw data + Suite2p output to ONE files
 ```

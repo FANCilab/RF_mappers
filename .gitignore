@@ -4,6 +4,5 @@ __pycache__/
 .claude/settings.local.json
 
 # outputs of main.py and the tutorial notebook
-ExampleSession/
 ExampleRoot/
 ExamplePlots/

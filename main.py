@@ -1,4 +1,4 @@
-"""Convert one session to ONE format and map its average receptive fields."""
+"""Convert one session to ONE format, map its average receptive fields and plot them."""
 from pathlib import Path
 
 import numpy as np
@@ -6,8 +6,11 @@ import numpy as np
 from OneConverter import OneSessionConverter
 from one.api import One
 from mapAverageRF import map_average_rf
+from single_session_plots import plot_session
+from grouped_session_plots import plot_group
 
-ONE_ROOT = Path(__file__).parent / "ExampleSession"
+ONE_ROOT = Path(__file__).parent / "ExampleRoot"
+PLOT_ROOT = Path(__file__).parent / "ExamplePlots"  # keep it outside of ONE_ROOT
 
 # Settings in step order. sparse_noise_shape and stimulus_edges_deg have no default; the others repeat
 # mapAverageRF.DEFAULT_SETTINGS for readability. encoder_counts_per_revolution is used only with running_regressor.
@@ -39,7 +42,7 @@ SETTINGS = {
     "force": False,                                      # rerun a FOV even if results with the same settings are saved
 }
 
-# %% Conversion
+# Conversion
 session = OneSessionConverter(
     "2P", "NM023", "20260428", 1,
     raw_data_root="//10.233.25.135/FANCiNAS1/Data",
@@ -50,6 +53,19 @@ session.exporters.SparseNoiseExporter.sparse_noise_shape = SETTINGS["sparse_nois
 session.exporters.SparseNoiseExporter.stimulus_edges_deg = SETTINGS["stimulus_edges_deg"]
 session.export()  # also re-indexes ONE_ROOT (converted data and earlier RF results)
 
-# %% RF mapping: results are written into the session, alf/FOV_XX/rf_<traces|deconv>/#<date>#/_ss_averageRF.*
+# RF mapping: results are written into the session, alf/FOV_XX/rf_<traces|deconv>/#<date>#/_ss_averageRF.*
 one = One(ONE_ROOT, mode="local")
 map_average_rf(one, session.session_path, SETTINGS)
+
+# Plots of this run: each FOV and the pooled session, in PLOT_ROOT/<subject>/<date>/<number>/
+plot_session(one, session.session_path, {"signal": SETTINGS["signal"], "output_dir": PLOT_ROOT})
+
+# Group plots, in PLOT_ROOT/<group_name>/: FOV runs of any sessions, subject/date/number/alf/FOV_XX/<rf_traces|rf_deconv>[/#revision#]
+plot_group(one, {
+    "group_name": "exampleGroup",
+    "fov_runs": [
+        "NM023/2026-04-28/001/alf/FOV_00/rf_traces",  # no revision = latest
+        "NM023/2026-04-28/001/alf/FOV_01/rf_traces",
+    ],
+    "output_dir": PLOT_ROOT,
+})
