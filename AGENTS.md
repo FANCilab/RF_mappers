@@ -15,7 +15,7 @@ All repos sit side by side in one parent folder (paths in this file and in the c
 ├── <this repo>/               this project, cloned from https://github.com/FANCilab/RF_mappers (any folder name)
 │   └── .venv/                 Python environment created by the setup below (git-ignored)
 ├── ONE/                       https://github.com/int-brain-lab/ONE  (tested at 636d76f, ONE-api 3.6.1)
-└── OneConverter/              https://github.com/FANCilab/OneConverter  (tested at 21907e6)
+└── OneConverter/              https://github.com/FANCilab/OneConverter  (tested at 3569831)
 ```
 
 ONE and OneConverter are installed as editable packages (`pip install -e`), so edits or `git pull` in those checkouts take effect without reinstalling. OneConverter imports `one`, so install ONE first.
