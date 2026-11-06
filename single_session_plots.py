@@ -11,8 +11,9 @@ from pathlib import Path
 
 import numpy as np
 import sparse
-from matplotlib import rcParams
-from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from matplotlib import colormaps, rcParams
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import LinearSegmentedColormap, Normalize, TwoSlopeNorm
 from matplotlib.figure import Figure
 from one.alf.io import load_object
 from one.alf.path import ALFPath
@@ -36,6 +37,7 @@ DEFAULT_PLOT_SETTINGS = {
     "explained_variance": True,    # RF explained variance, p < max_p_val vs. the rest (session: rebuilds the traces)
     "roi_overlays": True,          # ROIs on the mean image (session: neurons, filled and outlined)
     "rf_roi_overlay": True,        # neurons coloured by RF centre on the mean image; also good RFs only
+    "rf_position_overlays": True,  # as rf_roi_overlay, coloured by RF azimuth and, separately, by RF elevation
     # Plots made per FOV only
     "rf_maps": True,               # one RF map per neuron
     "n_rf_maps_good": 10,          # good RFs with the highest peak/noise; None = all
@@ -51,6 +53,7 @@ SUBFIELD_NAMES = ("ON", "OFF", "ON+OFF")
 RF_MAP_COLORS = LinearSegmentedColormap.from_list(
     "rf_map", [(0, "#b8b8b8"), (0.5, "#ffffff"), (0.83, "#00ff00"), (1, "#126d36")])
 AZIMUTH_LABEL = "Azimuth (deg, contralateral > 0)"
+POSITION_COLORS = colormaps["jet"]  # RF azimuth / elevation overlays
 
 
 def load_runs(one, session_path, signal="latest", revision="latest"):
@@ -228,7 +231,7 @@ def plot_session(one, session_path, settings):
                                          prediction, ev_all)
         if settings["peak_time_courses"] and good_ranked:
             plot_peak_time_courses(folder, title, good_ranked[:5], rf, maps, gauss, edges, meta)
-        if settings["roi_overlays"] or settings["rf_roi_overlay"]:
+        if settings["roi_overlays"] or settings["rf_roi_overlay"] or settings["rf_position_overlays"]:
             r["image"], r["rois"] = image, rois = load_fov_image(one, session_path, fov)  # also pooled below
             if settings["roi_overlays"]:
                 plot_roi_overlays(folder, title, image, rois["masks"], rois["mpciROITypes"])
@@ -236,6 +239,11 @@ def plot_session(one, session_path, settings):
                 for good_only in (False, True):
                     plot_rf_roi_overlay(folder, title, image, rois["masks"], rf["mpciROIs"], gauss, significant,
                                         good, edges, azimuth_limits, good_only)
+            if settings["rf_position_overlays"]:
+                for coordinate in ("azimuth", "elevation"):
+                    for good_only in (False, True):
+                        plot_rf_position_overlay(folder, title, image, rois["masks"], rf["mpciROIs"], gauss,
+                                                 significant, good, edges, azimuth_limits, coordinate, good_only)
         plot_folders[fov] = folder
 
     # %% All FOVs pooled
@@ -266,7 +274,7 @@ def plot_session(one, session_path, settings):
         is_significant = np.concatenate([r["rf"]["pValues"] < r["settings"]["max_p_val"] for r in runs])
         p_threshold = " / ".join(sorted({f"{r['settings']['max_p_val']:g}" for r in runs}))
         plot_ev_lines(folder, title, np.concatenate([r["ev_all"] for r in runs]), is_significant, p_threshold)
-    if settings["roi_overlays"] or settings["rf_roi_overlay"]:
+    if settings["roi_overlays"] or settings["rf_roi_overlay"] or settings["rf_position_overlays"]:
         # Mean images side by side; ROI masks and indices shifted to match.
         fov_labels, roi_offsets, coords, weights, roi_types = [], [], [], [], []
         x_offset, roi_offset = 0, 0
@@ -287,11 +295,16 @@ def plot_session(one, session_path, settings):
         if settings["roi_overlays"]:
             plot_neuron_overlays(folder, title, mosaic, masks, np.flatnonzero(np.concatenate(roi_types) == 1),
                                  fov_labels, figsize)
+        roi_index = np.concatenate([r["rf"]["mpciROIs"] + offset for r, offset in zip(runs, roi_offsets)])
         if settings["rf_roi_overlay"]:
-            roi_index = np.concatenate([r["rf"]["mpciROIs"] + offset for r, offset in zip(runs, roi_offsets)])
             for good_only in (False, True):
                 plot_rf_roi_overlay(folder, title, mosaic, masks, roi_index, gauss, significant, good, edges,
                                     azimuth_limits, good_only, fov_labels, figsize)
+        if settings["rf_position_overlays"]:
+            for coordinate in ("azimuth", "elevation"):
+                for good_only in (False, True):
+                    plot_rf_position_overlay(folder, title, mosaic, masks, roi_index, gauss, significant, good,
+                                             edges, azimuth_limits, coordinate, good_only, fov_labels)
     plot_folders["session"] = folder
     return plot_folders
 
@@ -595,29 +608,12 @@ def plot_rf_roi_overlay(folder, title, image, masks, roi_index, gauss, significa
     bottom, top = edges[2], edges[3]
     colormap = ColorMap2DBremm(range_x=(float(azimuth_limits[0]), float(azimuth_limits[1])),
                                range_y=(float(bottom), float(top)))
-    inside = (gauss[:, 1] >= azimuth_limits[0]) & (gauss[:, 1] <= azimuth_limits[1])
-    good = good & inside
-    shown = good if good_only else significant & inside
+    good, shown = rfs_shown(gauss, significant, good, azimuth_limits, good_only)
     fig = Figure(figsize=figsize, layout="constrained")
     ax, ax_legend = fig.subplots(1, 2, width_ratios=[3, 1.3])
-
-    layer = np.zeros((*image.shape, 4))
-    for n in np.flatnonzero(shown):
-        color = colormap(gauss[n, 1], gauss[n, 3]) / 255
-        y, x = roi_pixels(masks, roi_index[n])
-        if good[n]:
-            layer[y, x] = (*color, 1)
-        else:
-            draw_outline(ax, y, x, color)
-    ax.imshow(image, cmap="gray")
-    ax.imshow(layer)
-    label_fovs(ax, fov_labels)
-    if good_only:
-        name = f"Good RFs (n = {good.sum()})"
-    else:
-        name = f"Filled: good RFs (n = {good.sum()}); outlined: other significant RFs (n = {(shown & ~good).sum()})"
-    ax.set_title(name, pad=18 if fov_labels else None)  # room for FOV names
-    ax.set_axis_off()
+    neurons = np.flatnonzero(shown)
+    colors = [colormap(gauss[n, 1], gauss[n, 3]) / 255 for n in neurons]
+    draw_rf_rois(ax, image, masks, roi_index, neurons, good, colors, good_only, fov_labels)
 
     # Legend: the colour map over the shown visual field (stored as [x, y, RGB]) with the RF centres.
     ax_legend.imshow(colormap.get_cmap_data().transpose(1, 0, 2), origin="lower", extent=(*azimuth_limits, bottom, top),
@@ -632,6 +628,64 @@ def plot_rf_roi_overlay(folder, title, image, masks, roi_index, gauss, significa
                             f"{azimuth_limits[1]:g} deg")
     fig.suptitle(f"{title}: neurons coloured by RF centre" + (", good RFs only" if good_only else ""))
     save(fig, folder, "rfRoiOverlayGood" if good_only else "rfRoiOverlay")
+
+
+def rfs_shown(gauss, significant, good, azimuth_limits, good_only):
+    """RF overlays: (good, shown) neurons, both only those with the RF centred within azimuth_limits."""
+    inside = (gauss[:, 1] >= azimuth_limits[0]) & (gauss[:, 1] <= azimuth_limits[1])
+    good = good & inside
+    return good, good if good_only else significant & inside
+
+
+def draw_rf_rois(ax, image, masks, roi_index, neurons, good, colors, good_only, fov_labels):
+    """RF overlays: neurons on the mean image, each in its colour (RGB); good RFs filled, the others outlined."""
+    layer = np.zeros((*image.shape, 4))
+    for n, color in zip(neurons, colors):
+        y, x = roi_pixels(masks, roi_index[n])
+        if good[n]:
+            layer[y, x] = (*color, 1)
+        else:
+            draw_outline(ax, y, x, color)
+    ax.imshow(image, cmap="gray")
+    ax.imshow(layer)
+    label_fovs(ax, fov_labels)
+    n_good = good[neurons].sum()
+    if good_only:
+        name = f"Good RFs (n = {n_good})"
+    else:
+        name = f"Filled: good RFs (n = {n_good})\noutlined: other significant RFs (n = {len(neurons) - n_good})"
+    ax.set_title(name, pad=18 if fov_labels else None)  # room for FOV names
+    ax.set_axis_off()
+
+
+def plot_rf_position_overlay(folder, title, image, masks, roi_index, gauss, significant, good, edges, azimuth_limits,
+                             coordinate, good_only=False, fov_labels=()):
+    """9. Neurons coloured by the azimuth or the elevation (coordinate) of their Gaussian RF centre: good RFs filled,
+    other significant RFs outlined.
+
+    As plot_rf_roi_overlay: good_only shows only the good RFs, only RFs centred within azimuth_limits are drawn, and
+    fov_labels names the FOV images of the session mosaic. The colour scale spans azimuth_limits (azimuth) or the
+    screen's elevation. The figure is sized to the image. Saved as rfAzimuthOverlay, rfElevationOverlay (+ "Good"
+    for good_only).
+    """
+    column, limits, label = {"azimuth": (1, azimuth_limits, AZIMUTH_LABEL),
+                             "elevation": (3, edges[2:], "Elevation (deg)")}[coordinate]
+    norm = Normalize(*limits)
+    good, shown = rfs_shown(gauss, significant, good, azimuth_limits, good_only)
+    neurons = np.flatnonzero(shown)
+    aspect = image.shape[1] / image.shape[0]
+    image_height = min(8, 20 / aspect)  # inches; wide mosaics get shorter
+    fig = Figure(figsize=(max(7, image_height * aspect + 2.5), image_height + 1.6), layout="constrained")
+    ax = fig.subplots()
+    draw_rf_rois(ax, image, masks, roi_index, neurons, good, POSITION_COLORS(norm(gauss[neurons, column]))[:, :3],
+                 good_only, fov_labels)
+    fig.colorbar(ScalarMappable(norm, POSITION_COLORS), ax=ax, label=f"RF centre {label[0].lower()}{label[1:]}",
+                 shrink=0.8)
+    note = (f"; only RFs centred within azimuth {azimuth_limits[0]:g} to {azimuth_limits[1]:g} deg"
+            if tuple(azimuth_limits) != tuple(edges[:2]) else "")
+    fig.suptitle(f"{title}\nneurons coloured by RF {coordinate}" + (", good RFs only" if good_only else "") + note,
+                 fontsize=10)
+    save(fig, folder, f"rf{coordinate.capitalize()}Overlay" + ("Good" if good_only else ""))
 
 
 # %% Session plots (all FOVs pooled), used by plot_session
