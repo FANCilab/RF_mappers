@@ -39,7 +39,7 @@ results_path = map_average_rf(one, session_path, settings)
 For every FOV of the session it:
 
 1. builds the stimulus design matrix (each pixel, ON and OFF, at each delay in `rf_time_limits`), optionally cropped to part of the screen and with running speed as extra predictors;
-2. prepares the activity of curated neurons (smoothed and neuropil-corrected F, or Suite2p deconvolved), sampled at stimulus times and z-scored;
+2. prepares the activity of curated neurons (smoothed, neuropil-corrected and high-pass filtered F, or smoothed Suite2p deconvolved), sampled at stimulus times and z-scored;
 3. fits each neuron with smoothness-regularised ridge regression (optionally plus L1), choosing the penalty by cross-validation;
 4. tests significance by refitting on circularly shifted traces (p-value) and keeps RFs with p < `max_p_val` and explained variance > `min_ev`;
 5. for significant RFs, picks the subfield (ON, OFF or ON+OFF) and the best delay, fits a 2D Gaussian, and marks RFs with peak-to-noise > `min_peak_to_noise` as good.

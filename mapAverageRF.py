@@ -7,6 +7,7 @@ from math import ceil, floor
 from string import ascii_lowercase
 
 import numpy as np
+import pandas as pd
 from one.alf.cache import make_parquet_db
 from one.alf.io import save_object_npy
 from one.alf.path import ALFPath
@@ -29,6 +30,9 @@ DEFAULT_SETTINGS = {
     "run_time_limits": (-5.0, 5.0),     # step 1b: running-speed lags around each sample (s)
     "signal": "traces",                 # step 2: "traces" (F, neuropil-corrected) or "deconvolved" (Suite2p spikes)
     "smoothing_sigma": 2,               # step 2b: Gaussian smoothing of F and Fneu (imaging samples); traces only
+    "high_pass_s": 2,                   # step 2b: subtract a moving median of this many s after neuropil correction;
+                                        # traces only, None = off
+    "deconv_smoothing_sigma": 4,        # step 2b: Gaussian smoothing (imaging samples); deconvolved only, None = off
     "padding": 10,                      # step 2c: s of calcium kept around the stimulus period
     "max_nan_fraction": 0.1,            # step 2d: neurons with at most this NaN fraction are zero-filled
     "lambdas": np.logspace(-4, -1, 4),  # step 3: ridge penalties tried
@@ -56,8 +60,8 @@ def map_average_rf(one, session_path, settings):
 
     settings must contain sparse_noise_shape (rows, columns) and stimulus_edges_deg
     (left, right, bottom, top); any other key overrides DEFAULT_SETTINGS.
-    settings["signal"] chooses the activity that is fit: "traces" (F, smoothed and
-    neuropil-corrected) or "deconvolved" (Suite2p spikes, no preprocessing).
+    settings["signal"] chooses the activity that is fit: "traces" (F, smoothed, neuropil-corrected
+    and high-pass filtered) or "deconvolved" (Suite2p spikes, smoothed).
     settings["running_regressor"] adds running speed as extra predictors; RF
     significance is then judged on the stimulus part of the model only.
     settings["l1_enabled"] adds an L1 penalty (settings["l1_lambdas"], chosen by cross-validation
@@ -82,7 +86,9 @@ def map_average_rf(one, session_path, settings):
     running_regressor = settings["running_regressor"]      
     run_time_limits = settings["run_time_limits"]          
     signal = settings["signal"]                            
-    smoothing_sigma = settings["smoothing_sigma"]          
+    smoothing_sigma = settings["smoothing_sigma"]
+    high_pass_s = settings["high_pass_s"]
+    deconv_smoothing_sigma = settings["deconv_smoothing_sigma"]
     padding = settings["padding"]                          
     max_nan_fraction = settings["max_nan_fraction"]        
     lambdas = np.asarray(settings["lambdas"])
@@ -196,10 +202,16 @@ def map_average_rf(one, session_path, settings):
             F = gaussian_smooth(mpci.ROIActivityF[:, roi_index].astype(float), smoothing_sigma)
             Fneu = gaussian_smooth(mpci.ROINeuropilActivityF[:, roi_index].astype(float), smoothing_sigma)
             ca_traces = estimate_neuropil_lfr(F, Fneu)
+            # High-pass: subtract a centred moving median (NaNs ignored).
+            if high_pass_s:
+                window = round(high_pass_s / np.median(np.diff(mpci.times)))
+                ca_traces -= pd.DataFrame(ca_traces).rolling(window, center=True, min_periods=1).median().to_numpy()
         else:
-            # a-b. Curated neurons; deconvolved activity is used as it is.
+            # a-b. Curated neurons, Gaussian-smoothed deconvolved activity.
             roi_index = np.flatnonzero(rois.mpciROITypes == 1)
             ca_traces = mpci.ROIActivityDeconvolved[:, roi_index].astype(float)
+            if deconv_smoothing_sigma:
+                ca_traces = gaussian_smooth(ca_traces, deconv_smoothing_sigma)
         n_neurons = len(roi_index)
         print(f"{fov}: {n_neurons} neurons ({signal}, running regressor {'on' if running_regressor else 'off'}, "
               f"L1 {'on' if l1_enabled else 'off'})")

@@ -25,6 +25,8 @@ SETTINGS = {
     "run_time_limits": (-5.0, 5.0),                      # step 1b: running-speed lags around each sample (s)
     "signal": "traces",                                  # step 2: "traces" (F, neuropil-corrected) or "deconvolved" (Suite2p spikes)
     "smoothing_sigma": 2,                                # step 2b: Gaussian smoothing of F and Fneu (imaging samples); traces only
+    "high_pass_s": 2,                                    # step 2b: subtract a moving median of this many s after neuropil correction; traces only, None = off
+    "deconv_smoothing_sigma": 4,                         # step 2b: Gaussian smoothing (imaging samples); deconvolved only, None = off
     "padding": 10,                                       # step 2c: s of calcium kept around the stimulus period
     "max_nan_fraction": 0.1,                             # step 2d: neurons with at most this NaN fraction are zero-filled
     "lambdas": np.logspace(-4, -1, 4),                   # step 3: ridge penalties tried

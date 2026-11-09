@@ -10,6 +10,7 @@ from math import ceil, floor
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import sparse
 from matplotlib import colormaps, rcParams
 from matplotlib.cm import ScalarMappable
@@ -486,9 +487,14 @@ def model_traces(one, session_path, fov, rf, meta):
         F = gaussian_smooth(mpci.ROIActivityF[:, roi_index].astype(float), run["smoothing_sigma"])
         Fneu = gaussian_smooth(mpci.ROINeuropilActivityF[:, roi_index].astype(float), run["smoothing_sigma"])
         ca_traces = estimate_neuropil_lfr(F, Fneu)
+        if run["high_pass_s"]:
+            window = round(run["high_pass_s"] / np.median(np.diff(mpci.times)))
+            ca_traces -= pd.DataFrame(ca_traces).rolling(window, center=True, min_periods=1).median().to_numpy()
     else:
         roi_index = np.flatnonzero(rois.mpciROITypes == 1)
         ca_traces = mpci.ROIActivityDeconvolved[:, roi_index].astype(float)
+        if run["deconv_smoothing_sigma"]:
+            ca_traces = gaussian_smooth(ca_traces, run["deconv_smoothing_sigma"])
     if not np.array_equal(roi_index, rf["mpciROIs"]):
         raise ValueError(f"{fov}: rebuilt neurons differ from the run's mpciROIs; data or code changed since the run")
     in_window = (mpci.times > t_stim[0] - run["padding"]) & (mpci.times < t_stim[-1] + run["padding"])
